@@ -1,45 +1,31 @@
 # gine
 
-A terminal user interface (TUI) MIME editor written in Go.
+A terminal UI for browsing MIME types and the applications that handle them.
 
-`gine` is intended to help you open, inspect, and edit MIME-style content
-directly from your terminal with a keyboard-first workflow.
-
-## Goals
-
-- Provide a fast, terminal-native editing experience
-- Make MIME structures easy to inspect and modify
-- Keep the project simple, scriptable, and hackable
-
-## Planned Features
-
-- Parse MIME messages (single-part and multipart)
-- Navigate MIME headers and body sections in a split-pane TUI
-- Edit headers and body content safely
-- Add/remove MIME parts and attachments
-- Preview common encodings/content-transfer transformations
-- Export updated MIME content
-
-## Project Status
-
-Early development. APIs, CLI flags, and UX are expected to change.
+Search the system MIME list, see which installed apps claim each type, and set or clear the default in `mimeapps.list`.
 
 ## Getting Started
 
-When source files are added, this section can include build and run commands
-such as:
-
 ```bash
-go mod tidy
-go run ./cmd/gine
+go install .
 ```
+
+Theme colors are read from `~/.config/gine/theme.toml`. A missing file uses the built-in defaults.
+
+## Layout
+
+- `main.go` calls `app.Start`
+- `internal/app` loads the theme, MIME types, installed apps, and user associations, then runs the screen
+- `internal/gui` is the screen
+- `internal/gui/style` holds the lipgloss styles
+- `internal/theme` picks colors for the terminal background
+- `internal/config` reads the theme file
+- `internal/mimetype` reads the shared MIME database, `.desktop` files, and `mimeapps.list`
 
 ## Development
 
-Suggested local workflow:
-
 ```bash
-go fmt ./...
+gofmt -w .
 go test ./...
 ```
 

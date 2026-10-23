@@ -1,6 +1,8 @@
+// Package config loads ~/.config/gine/theme.toml.
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 
@@ -21,18 +23,28 @@ var defaults = Config{
 	MutedDark:   "#9CA3AF",
 }
 
-func GetConfig() Config {
-	conf := defaults
-	if path, err := getPath(); err == nil {
-		_, _ = toml.DecodeFile(path, &conf)
+// Load reads ~/.config/gine/theme.toml. A missing file uses the defaults.
+func Load() (Config, error) {
+	loaded := defaults
+	path, err := themePath()
+	if err != nil {
+		return loaded, nil
 	}
-	return conf
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		return loaded, nil
+	} else if err != nil {
+		return Config{}, err
+	}
+	if _, err := toml.DecodeFile(path, &loaded); err != nil {
+		return Config{}, err
+	}
+	return loaded, nil
 }
 
-func getPath() (string, error) {
-	dir, err := os.UserConfigDir()
+func themePath() (string, error) {
+	directory, err := os.UserConfigDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(dir, "gine", "theme.toml"), nil
+	return filepath.Join(directory, "gine", "theme.toml"), nil
 }

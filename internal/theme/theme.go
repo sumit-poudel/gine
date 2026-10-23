@@ -1,3 +1,4 @@
+// Package theme picks accent and muted colors for the terminal background.
 package theme
 
 import (
@@ -13,73 +14,25 @@ type Theme struct {
 	muted  color.Color
 }
 
-func New(dark bool) Theme {
-	cfg := config.GetConfig()
-	lightDark := lipgloss.LightDark(dark)
+func New(dark bool, colors config.Config) Theme {
+	pick := lipgloss.LightDark(dark)
 	return Theme{
-		accent: lightDark(lipgloss.Color(cfg.AccentLight), lipgloss.Color(cfg.AccentDark)),
-		muted:  lightDark(lipgloss.Color(cfg.MutedLight), lipgloss.Color(cfg.MutedDark)),
+		accent: pick(lipgloss.Color(colors.AccentLight), lipgloss.Color(colors.AccentDark)),
+		muted:  pick(lipgloss.Color(colors.MutedLight), lipgloss.Color(colors.MutedDark)),
 	}
 }
 
-func (t Theme) Screen(width, height int) lipgloss.Style {
-	return lipgloss.NewStyle().
-		Width(width).
-		Height(height).
-		Align(lipgloss.Center)
-}
+func (theme Theme) Accent() color.Color { return theme.accent }
 
-func (t Theme) Title() lipgloss.Style {
-	return lipgloss.NewStyle().
-		Foreground(t.accent).
-		Bold(true)
-}
+func (theme Theme) Muted() color.Color { return theme.muted }
 
-func (t Theme) Footer(width int) lipgloss.Style {
-	return lipgloss.NewStyle().
-		Width(width).
-		Align(lipgloss.Center).
-		Foreground(t.muted)
-}
+const midBrightness = 0x7FFF
 
-func (t Theme) Input() lipgloss.Style {
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(t.accent).
-		Bold(true)
-}
-
-func (t Theme) Dialog() lipgloss.Style {
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(t.accent).
-		Padding(1, 2)
-}
-
-func (t Theme) DialogKey(gap int) lipgloss.Style {
-	return lipgloss.NewStyle().
-		Foreground(t.accent).
-		Bold(true).
-		PaddingRight(gap)
-}
-
-func (t Theme) DialogCell() lipgloss.Style {
-	return lipgloss.NewStyle()
-}
-
-func (t Theme) Flex(width, height int, panels ...string) string {
-	if len(panels) == 0 {
-		return ""
+func (theme Theme) Contrast() color.Color {
+	red, green, blue, _ := theme.accent.RGBA()
+	brightness := (299*int(red) + 587*int(green) + 114*int(blue)) / 1000
+	if brightness > midBrightness {
+		return lipgloss.Color("#1C1917")
 	}
-
-	base, extra := width/len(panels), width%len(panels)
-	blocks := make([]string, len(panels))
-	for i, panel := range panels {
-		w := base
-		if i < extra {
-			w++
-		}
-		blocks[i] = lipgloss.NewStyle().Width(w).Height(height).Render(panel)
-	}
-	return lipgloss.JoinHorizontal(lipgloss.Top, blocks...)
+	return lipgloss.Color("#FAFAF9")
 }
