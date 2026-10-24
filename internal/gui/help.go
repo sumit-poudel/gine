@@ -40,7 +40,11 @@ func (help Help) render(styles style.Styles, vimMode bool) string {
 			return styles.Description()
 		})
 
-	for _, binding := range contextFor(vimMode).shortcuts {
+	bindings := normalShortcuts
+	if vimMode {
+		bindings = visualShortcuts
+	}
+	for _, binding := range bindings {
 		grid.Row(binding.label, binding.description)
 	}
 	return styles.HelpFrame().Render(grid.Render())

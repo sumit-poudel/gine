@@ -58,7 +58,8 @@ func (model Model) View() tea.View {
 
 func (model Model) screen() string {
 	width, height := model.window.width, model.window.height
-	if !model.hasWindowSize && (width != 0 || height != 0) {
+	sizeKnown := width != 0 || height != 0
+	if sizeKnown && !model.usable() {
 		return model.tooSmall()
 	}
 	layers := []*lipgloss.Layer{
@@ -83,10 +84,9 @@ func (model Model) tooSmall() string {
 
 func (model Model) baseLayer() string {
 	header := model.header()
-	body := splitColumns(model.styles, model.window.width, model.listHeight(),
-		model.mimeTypes.View(model.styles, model.paneFocused(mimeTypePane), model.styles.MimeRow),
-		model.detail(),
-	)
+	title := model.styles.InfoName().Width(model.listWidth()).BorderStyle(lipgloss.ASCIIBorder()).BorderForeground(model.styles.Accent()).BorderBottom(true).Render("MIME Types")
+
+	body := splitColumns(model.styles, model.window.width, model.listHeight(), lipgloss.JoinVertical(lipgloss.Left, title, model.mimeTypes.View(model.styles, model.paneFocused(mimeTypePane), model.styles.MimeRow)), model.detail())
 	return model.styles.Window(model.window.width, model.window.height).Render(header + "\n" + body)
 }
 
@@ -238,9 +238,11 @@ func (model Model) footer() string {
 		Render(help)
 	mode := model.styles.InfoValue().Render(model.vimModeHint()) +
 		model.styles.InfoLabel().Render(" MODE")
+	hints := model.getHint()
 	return lipgloss.NewCompositor(
 		lipgloss.NewLayer(line),
 		lipgloss.NewLayer(mode),
+		lipgloss.NewLayer(hints).X(max(0, model.window.width-lipgloss.Width(hints))),
 	).Render()
 }
 

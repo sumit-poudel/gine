@@ -26,21 +26,19 @@ const (
 )
 
 type Model struct {
-	hasWindowSize bool
-	window        window
-	colors        config.Config
-	search        Search
-	help          Help
-	mimeTypes     TypeList
-	mimeTypesAll  []string
-	applications  TypeList
-	visibleApps   []mimetype.Application
-	catalog       mimetype.Catalog
-	associations  mimetype.Associations
-	focus         pane
-	vimMode       bool
-	// navFocus highlights the pane the vim keys are steering. It turns on with
-	// the first navigation key, so changing mode alone leaves both panes idle.
+	window       window
+	colors       config.Config
+	search       Search
+	help         Help
+	mimeTypes    TypeList
+	mimeTypesAll []string
+	applications TypeList
+	visibleApps  []mimetype.Application
+	catalog      mimetype.Catalog
+	associations mimetype.Associations
+	focus        pane
+	vimMode      bool
+	// navFocus turns on with the first navigation key.
 	navFocus bool
 	styles   style.Styles
 	note     string
@@ -48,16 +46,15 @@ type Model struct {
 
 func New(colors config.Config, mimeTypes []string, catalog mimetype.Catalog, associations mimetype.Associations) Model {
 	model := Model{
-		hasWindowSize: false,
-		colors:        colors,
-		search:        newSearch(),
-		styles:        style.New(theme.New(true, colors)),
-		help:          newHelp(),
-		mimeTypes:     newTypeList(mimeTypes),
-		mimeTypesAll:  mimeTypes,
-		catalog:       catalog,
-		associations:  associations,
-		vimMode:       false,
+		colors:       colors,
+		search:       newSearch(),
+		styles:       style.New(theme.New(true, colors)),
+		help:         newHelp(),
+		mimeTypes:    newTypeList(mimeTypes),
+		mimeTypesAll: mimeTypes,
+		catalog:      catalog,
+		associations: associations,
+		vimMode:      false,
 	}
 	model.search.paint(model.styles)
 	return model
@@ -77,8 +74,7 @@ func (model Model) withBackground(dark bool) Model {
 func (model Model) resize(width, height int) Model {
 	model.window.width = width
 	model.window.height = height
-	model.hasWindowSize = width >= minWindowWidth && model.listHeight() >= 1
-	if !model.hasWindowSize {
+	if !model.usable() {
 		return model
 	}
 	model.search.Resize(width)
@@ -86,17 +82,27 @@ func (model Model) resize(width, height int) Model {
 	return model
 }
 
-func (model *Model) selectPreviousMIMEType() { model.move((*TypeList).Previous) }
+func (model Model) usable() bool {
+	return model.window.width >= minWindowWidth && model.listHeight() >= 1
+}
 
-func (model *Model) selectNextMIMEType() { model.move((*TypeList).Next) }
-
-func (model *Model) move(step func(*TypeList)) {
+func (model *Model) selectPreviousMIMEType() {
 	model.navFocus = true
 	if model.focus == applicationPane {
-		step(&model.applications)
+		model.applications.Previous()
 		return
 	}
-	step(&model.mimeTypes)
+	model.mimeTypes.Previous()
+	model.refreshApplications()
+}
+
+func (model *Model) selectNextMIMEType() {
+	model.navFocus = true
+	if model.focus == applicationPane {
+		model.applications.Next()
+		return
+	}
+	model.mimeTypes.Next()
 	model.refreshApplications()
 }
 
@@ -260,4 +266,11 @@ func (model Model) vimModeHint() string {
 		return "VISUAL"
 	}
 	return "NORMAL"
+}
+
+func (model Model) getHint() string {
+	if !model.navFocus {
+		return model.styles.InfoValue().Bold(true).Render("ENTER") + model.styles.InfoLabel().Render(" to focus mime")
+	}
+	return model.styles.InfoValue().Bold(true).Render("i") + model.styles.InfoLabel().Render(" to type, ") + model.styles.InfoValue().Bold(true).Render("?") + model.styles.InfoLabel().Render(" for help")
 }

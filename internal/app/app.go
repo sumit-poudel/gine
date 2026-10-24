@@ -11,7 +11,6 @@ import (
 	"github.com/sumit-poudel/gine/internal/mimetype"
 )
 
-// Start loads configuration and the MIME index, then runs the screen.
 func Start() error {
 	colors, err := config.Load()
 	if err != nil {

@@ -3,6 +3,7 @@ package config
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -23,20 +24,13 @@ var defaults = Config{
 	MutedDark:   "#9CA3AF",
 }
 
-// Load reads ~/.config/gine/theme.toml. A missing file uses the defaults.
 func Load() (Config, error) {
 	loaded := defaults
 	path, err := themePath()
-	if err != nil {
-		return loaded, nil
-	}
-	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
-		return loaded, nil
-	} else if err != nil {
-		return Config{}, err
-	}
-	if _, err := toml.DecodeFile(path, &loaded); err != nil {
-		return Config{}, err
+	if err == nil {
+		if _, err := toml.DecodeFile(path, &loaded); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return Config{}, err
+		}
 	}
 	return loaded, nil
 }

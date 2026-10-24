@@ -68,7 +68,6 @@ func (list TypeList) View(styles style.Styles, focused bool, row rowStyle) strin
 	if capacity == 0 || list.width == 0 || len(list.types) == 0 {
 		return ""
 	}
-
 	end := min(len(list.types), list.offset+capacity)
 	rows := make([]string, 0, end-list.offset)
 	for index := list.offset; index < end; index++ {
@@ -89,7 +88,7 @@ func (list TypeList) capacity() int {
 	if list.rowHeight < 1 || list.height < 1 {
 		return 0
 	}
-	return list.height / list.rowHeight
+	return (list.height / list.rowHeight) - 2
 }
 
 func (list *TypeList) slide() {
@@ -101,7 +100,7 @@ func (list *TypeList) slide() {
 	if capacity < 1 {
 		return
 	}
-	if list.selected < list.offset {
+	if list.selected <= list.offset {
 		list.offset = list.selected
 	}
 	if list.selected >= list.offset+capacity {

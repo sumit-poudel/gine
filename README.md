@@ -7,26 +7,43 @@ Search the system MIME list, see which installed apps claim each type, and set o
 ## Getting Started
 
 ```bash
-go install .
+go install github.com/sumit-poudel/gine@latest
 ```
 
 Theme colors are read from `~/.config/gine/theme.toml`. A missing file uses the built-in defaults.
 
 ## Layout
 
-- `main.go` calls `app.Start`
-- `internal/app` loads the theme, MIME types, installed apps, and user associations, then runs the screen
-- `internal/gui` is the screen
-- `internal/gui/style` holds the lipgloss styles
-- `internal/theme` picks colors for the terminal background
-- `internal/config` reads the theme file
-- `internal/mimetype` reads the shared MIME database, `.desktop` files, and `mimeapps.list`
-
-## Development
-
-```bash
-gofmt -w .
-go test ./...
+```
+├── .github
+│   └── workflows
+│       └── main.yaml
+├── internal
+│   ├── app
+│   │   └── app.go
+│   ├── config
+│   │   └── config.go
+│   ├── gui
+│   │   ├── style
+│   │   │   └── style.go
+│   │   ├── help.go
+│   │   ├── keymap.go
+│   │   ├── mimetypes.go
+│   │   ├── model.go
+│   │   ├── update.go
+│   │   └── view.go
+│   ├── mimetype
+│   │   ├── associations.go
+│   │   ├── desktop.go
+│   │   └── types.go
+│   └── theme
+│       └── theme.go
+├── .goreleaser.yaml
+├── go.mod
+├── go.sum
+├── LICENSE
+├── main.go
+└── README.md
 ```
 
 ## License

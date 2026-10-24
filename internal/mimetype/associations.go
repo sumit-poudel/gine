@@ -143,7 +143,7 @@ func sectionLists(file *ini.File, name string) map[string][]string {
 
 func splitList(value string) []string {
 	var items []string
-	for _, item := range strings.Split(value, ";") {
+	for item := range strings.SplitSeq(value, ";") {
 		item = strings.TrimSpace(item)
 		if item != "" {
 			items = append(items, item)

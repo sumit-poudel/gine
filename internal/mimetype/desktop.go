@@ -50,12 +50,6 @@ func LoadCatalog() Catalog {
 	}
 	for mimeType, applications := range catalog.ByMIME {
 		slices.SortFunc(applications, func(left, right Application) int {
-			return strings.Compare(left.FileName, right.FileName)
-		})
-		applications = slices.CompactFunc(applications, func(left, right Application) bool {
-			return left.FileName == right.FileName
-		})
-		slices.SortFunc(applications, func(left, right Application) int {
 			return strings.Compare(left.Name, right.Name)
 		})
 		catalog.ByMIME[mimeType] = applications
