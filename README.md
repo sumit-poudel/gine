@@ -10,6 +10,12 @@ Search the system MIME list, see which installed apps claim each type, and set o
 go install github.com/sumit-poudel/gine@latest
 ```
 
+or
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/sumit-poudel/gine/main/install.sh | bash
+```
+
 Theme colors are read from `~/.config/gine/theme.toml`. A missing file uses the built-in defaults.
 
 ## Layout
