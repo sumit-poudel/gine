@@ -16,7 +16,7 @@ var normalShortcuts = []shortcut{
 	{
 		chord: "enter", label: "enter", description: "Focus the application list",
 		action: func(model *Model) {
-			if len(model.visibleApps) == 0 {
+			if len(model.mimeTypes.types) == 0 {
 				return
 			}
 			model.stopTyping()

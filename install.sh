@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # This script installs the Gine project dependencies and sets up the environment.
-version="0.1.3"
+version="0.1.5"
 must=("curl" "tar")
 platform="$(uname -s)"
 arch="$(uname -m)"
