@@ -26,22 +26,28 @@ const (
 )
 
 type Model struct {
-	window       window
-	colors       config.Config
-	search       Search
-	help         Help
-	mimeTypes    TypeList
-	mimeTypesAll []string
-	applications TypeList
-	visibleApps  []mimetype.Application
-	catalog      mimetype.Catalog
-	associations mimetype.Associations
-	focus        pane
-	vimMode      bool
-	// navFocus turns on with the first navigation key.
-	navFocus bool
-	styles   style.Styles
-	note     string
+	window           window
+	colors           config.Config
+	search           Search
+	help             Help
+	mimeTypes        TypeList
+	mimeTypesAll     []string
+	applications     TypeList
+	visibleApps      []mimetype.Application
+	allApps          []mimetype.Application
+	browserApps      []mimetype.Application
+	browserAppList   TypeList
+	browserMIMETypes TypeList
+	catalog          mimetype.Catalog
+	associations     mimetype.Associations
+	focus            pane
+	vimMode          bool
+	navFocus         bool
+	swap             bool
+	mimeQuery        string
+	appQuery         string
+	styles           style.Styles
+	note             string
 }
 
 func New(colors config.Config, mimeTypes []string, catalog mimetype.Catalog, associations mimetype.Associations) Model {
@@ -52,8 +58,10 @@ func New(colors config.Config, mimeTypes []string, catalog mimetype.Catalog, ass
 		help:         newHelp(),
 		mimeTypes:    newTypeList(mimeTypes),
 		mimeTypesAll: mimeTypes,
+		allApps:      catalogApplications(catalog),
 		catalog:      catalog,
 		associations: associations,
+		swap:         false,
 		vimMode:      false,
 	}
 	model.search.paint(model.styles)
@@ -86,8 +94,17 @@ func (model Model) usable() bool {
 	return model.window.width >= minWindowWidth && model.listHeight() >= 1
 }
 
-func (model *Model) selectPreviousMIMEType() {
+func (model *Model) selectPreviousRow() {
 	model.navFocus = true
+	if model.swap {
+		if model.focus == applicationPane {
+			model.browserAppList.Previous()
+			model.refreshBrowserMIMETypes()
+			return
+		}
+		model.browserMIMETypes.Previous()
+		return
+	}
 	if model.focus == applicationPane {
 		model.applications.Previous()
 		return
@@ -96,8 +113,17 @@ func (model *Model) selectPreviousMIMEType() {
 	model.refreshApplications()
 }
 
-func (model *Model) selectNextMIMEType() {
+func (model *Model) selectNextRow() {
 	model.navFocus = true
+	if model.swap {
+		if model.focus == applicationPane {
+			model.browserAppList.Next()
+			model.refreshBrowserMIMETypes()
+			return
+		}
+		model.browserMIMETypes.Next()
+		return
+	}
 	if model.focus == applicationPane {
 		model.applications.Next()
 		return
@@ -106,7 +132,20 @@ func (model *Model) selectNextMIMEType() {
 	model.refreshApplications()
 }
 
-func (model *Model) focusApplications() {
+func (model *Model) focusApplicationList() {
+	if model.swap {
+		if model.browserAppList.Empty() {
+			return
+		}
+		model.focus = applicationPane
+		model.navFocus = true
+		if model.browserAppList.selected < 0 {
+			model.browserAppList.selected = 0
+			model.refreshBrowserMIMETypes()
+		}
+		model.layoutLists()
+		return
+	}
 	if model.applications.Empty() {
 		return
 	}
@@ -118,8 +157,71 @@ func (model *Model) focusApplications() {
 	model.layoutLists()
 }
 
-func (model *Model) focusMIMETypes() {
+func (model *Model) focusMIMETypeList() {
+	if model.swap && model.browserMIMETypes.Empty() {
+		return
+	}
+	if model.swap && model.browserMIMETypes.selected < 0 {
+		model.browserMIMETypes.selected = 0
+	}
 	model.focus = mimeTypePane
+	model.navFocus = true
+	model.layoutLists()
+}
+
+func (model Model) leftList() pane {
+	if model.swap {
+		return applicationPane
+	}
+	return mimeTypePane
+}
+
+func (model Model) rightList() pane {
+	if model.swap {
+		return mimeTypePane
+	}
+	return applicationPane
+}
+
+func (model *Model) focusLeftList() {
+	model.focusList(model.leftList())
+}
+
+func (model *Model) focusRightList() {
+	model.focusList(model.rightList())
+}
+
+func (model *Model) focusList(target pane) {
+	if target == applicationPane {
+		model.focusApplicationList()
+		return
+	}
+	model.focusMIMETypeList()
+}
+
+func (model *Model) toggleSwap() {
+	if model.swap {
+		model.appQuery = model.search.Value()
+		model.swap = false
+		model.search.Placeholder = searchPlaceholder
+		model.search.SetValue(model.mimeQuery)
+		model.applySearch()
+		model.refreshApplications()
+		model.focus = mimeTypePane
+		model.navFocus = true
+		model.layoutLists()
+		return
+	}
+
+	model.mimeQuery = model.search.Value()
+	model.swap = true
+	model.search.Placeholder = applicationSearchPlaceholder
+	model.search.SetValue(model.appQuery)
+	model.refreshApplicationBrowser()
+	model.focus = applicationPane
+	if model.browserAppList.Empty() {
+		model.focus = mimeTypePane
+	}
 	model.navFocus = true
 	model.layoutLists()
 }
@@ -141,16 +243,21 @@ func (model Model) paneFocused(p pane) bool {
 }
 
 func (model *Model) editAssociation(edit func(mimeType, fileName string) error) {
-	app, ok := model.selectedApplication()
-	if !ok {
+	app, ok := model.activeApplication()
+	mimeType := model.activeMIMEType()
+	if !ok || mimeType == "" {
 		return
 	}
-	if err := edit(model.mimeTypes.Selected(), app.FileName); err != nil {
+	if err := edit(mimeType, app.FileName); err != nil {
 		model.note = err.Error()
 		return
 	}
 	model.note = ""
 	model.refreshApplications()
+	if model.swap {
+		model.refreshBrowserMIMETypes()
+		model.layoutLists()
+	}
 }
 
 func (model *Model) toggleDefault() {
@@ -167,16 +274,20 @@ func (model *Model) clearMIME() {
 }
 
 func (model Model) selectedIsDefault() bool {
-	app, ok := model.selectedApplication()
-	return ok && model.associations.IsDefault(model.mimeTypes.Selected(), app.FileName)
+	app, ok := model.activeApplication()
+	return ok && model.associations.IsDefault(model.activeMIMEType(), app.FileName)
 }
 
 func (model Model) selectedIsCleared() bool {
-	app, ok := model.selectedApplication()
-	return ok && model.associations.Removed(model.mimeTypes.Selected(), app.FileName)
+	app, ok := model.activeApplication()
+	return ok && model.associations.Removed(model.activeMIMEType(), app.FileName)
 }
 
 func (model *Model) applySearch() {
+	if model.swap {
+		model.refreshApplicationBrowser()
+		return
+	}
 	query := strings.ToLower(model.search.Value())
 	previous := model.mimeTypes.Selected()
 	matched := make([]string, 0, len(model.mimeTypesAll))
@@ -198,7 +309,7 @@ func (model *Model) refreshApplications() {
 	selected := model.applications.selected
 	model.visibleApps = model.appsForSelectedMIME()
 	model.applications.setItems(model.applicationLabels())
-	if model.focus == applicationPane && !model.applications.Empty() {
+	if !model.swap && model.focus == applicationPane && !model.applications.Empty() {
 		if selected >= 0 && selected < len(model.applications.types) {
 			model.applications.selected = selected
 		} else {
@@ -211,6 +322,8 @@ func (model *Model) refreshApplications() {
 func (model *Model) layoutLists() {
 	model.mimeTypes.Resize(model.listWidth(), model.listHeight(), model.styles)
 	model.applications.Resize(model.detailWidth(), model.applicationListHeight(), model.styles)
+	model.browserAppList.Resize(model.listWidth(), model.listHeight(), model.styles)
+	model.browserMIMETypes.Resize(model.detailWidth(), model.mimeTypeBrowserListHeight(), model.styles)
 }
 
 func (model Model) appsForSelectedMIME() []mimetype.Application {
@@ -236,6 +349,128 @@ func (model Model) appsForSelectedMIME() []mimetype.Application {
 		apps = append(apps, app)
 	}
 	return apps
+}
+
+func catalogApplications(catalog mimetype.Catalog) []mimetype.Application {
+	apps := make([]mimetype.Application, 0, len(catalog.ByFile))
+	for _, app := range catalog.ByFile {
+		if len(app.MIMETypes) == 0 {
+			continue
+		}
+		apps = append(apps, app)
+	}
+	slices.SortFunc(apps, func(left, right mimetype.Application) int {
+		if compared := strings.Compare(left.Name, right.Name); compared != 0 {
+			return compared
+		}
+		return strings.Compare(left.FileName, right.FileName)
+	})
+	return apps
+}
+
+func (model *Model) refreshApplicationBrowser() {
+	model.refreshBrowserApplications()
+	model.refreshBrowserMIMETypes()
+	model.layoutLists()
+}
+
+func (model *Model) refreshBrowserApplications() {
+	query := strings.ToLower(model.search.Value())
+	previous, hadPrevious := model.selectedBrowserApplication()
+	matched := make([]mimetype.Application, 0, len(model.allApps))
+	for _, app := range model.allApps {
+		if query == "" || strings.Contains(strings.ToLower(app.Name), query) {
+			matched = append(matched, app)
+		}
+	}
+
+	labels := make([]string, len(matched))
+	for index, app := range matched {
+		labels[index] = app.Name
+	}
+	model.browserApps = matched
+	model.browserAppList.setItems(labels)
+
+	index := -1
+	if hadPrevious {
+		index = slices.IndexFunc(matched, func(app mimetype.Application) bool {
+			return app.FileName == previous.FileName
+		})
+	}
+	if index < 0 && len(matched) > 0 {
+		index = 0
+	}
+	model.browserAppList.selected = index
+}
+
+func (model *Model) refreshBrowserMIMETypes() {
+	previous := model.selectedBrowserMIMEType()
+	app, ok := model.selectedBrowserApplication()
+	if !ok {
+		model.browserMIMETypes.setItems(nil)
+		return
+	}
+
+	labels := make([]string, len(app.MIMETypes))
+	for index, mimeType := range app.MIMETypes {
+		labels[index] = model.mimeTypeLabel(app.FileName, mimeType)
+	}
+	model.browserMIMETypes.setItems(labels)
+
+	index := slices.Index(app.MIMETypes, previous)
+	if index < 0 && len(app.MIMETypes) > 0 {
+		index = 0
+	}
+	model.browserMIMETypes.selected = index
+}
+
+func (model Model) mimeTypeLabel(fileName, mimeType string) string {
+	switch {
+	case model.associations.Removed(mimeType, fileName):
+		return "* " + mimeType
+	case model.associations.IsDefault(mimeType, fileName):
+		return mimeType + " (default)"
+	default:
+		return mimeType
+	}
+}
+
+func (model Model) selectedBrowserApplication() (mimetype.Application, bool) {
+	index := model.browserAppList.selected
+	if index < 0 || index >= len(model.browserApps) {
+		return mimetype.Application{}, false
+	}
+	return model.browserApps[index], true
+}
+
+func (model Model) selectedBrowserMIMEType() string {
+	app, ok := model.selectedBrowserApplication()
+	index := model.browserMIMETypes.selected
+	if !ok || index < 0 || index >= len(app.MIMETypes) {
+		return ""
+	}
+	return app.MIMETypes[index]
+}
+
+func (model Model) activeApplication() (mimetype.Application, bool) {
+	if model.swap {
+		return model.selectedBrowserApplication()
+	}
+	return model.selectedApplication()
+}
+
+func (model Model) activeMIMEType() string {
+	if model.swap {
+		return model.selectedBrowserMIMEType()
+	}
+	return model.mimeTypes.Selected()
+}
+
+func (model Model) associationActionsAvailable() bool {
+	if !model.navFocus {
+		return false
+	}
+	return model.swap || model.focus == applicationPane
 }
 
 func (model Model) applicationLabels() []string {

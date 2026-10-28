@@ -8,18 +8,20 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/sumit-poudel/gine/internal/gui/style"
+	"github.com/sumit-poudel/gine/internal/mimetype"
 )
 
 const (
-	appTitle          = "GINE"
-	searchPlaceholder = "Search Mime Type"
-	maxQueryLength    = 156
-	searchFrameWidth  = 10
-	emptyDetail       = "no apps support "
-	statusLayer       = 1
-	helpLayer         = 10
-	minWindowWidth    = 50
-	windowTooSmall    = "Window too small"
+	appTitle                     = "GINE"
+	searchPlaceholder            = "Search Mime Type"
+	applicationSearchPlaceholder = "Search Application"
+	maxQueryLength               = 156
+	searchFrameWidth             = 10
+	emptyDetail                  = "no apps support "
+	statusLayer                  = 1
+	helpLayer                    = 10
+	minWindowWidth               = 50
+	windowTooSmall               = "Window too small"
 )
 
 type Search struct {
@@ -84,25 +86,54 @@ func (model Model) tooSmall() string {
 
 func (model Model) baseLayer() string {
 	header := model.header()
-	title := model.styles.InfoName().Width(model.listWidth()).BorderStyle(lipgloss.ASCIIBorder()).BorderForeground(model.styles.Accent()).BorderBottom(true).Render("MIME Types")
+	var left, right string
 
-	body := splitColumns(model.styles, model.window.width, model.listHeight(), lipgloss.JoinVertical(lipgloss.Left, title, model.mimeTypes.View(model.styles, model.paneFocused(mimeTypePane), model.styles.MimeRow)), model.detail())
+	if model.swap {
+		left = lipgloss.JoinVertical(lipgloss.Left,
+			model.paneTitle("Applications", model.listWidth()),
+			model.applicationBrowserList(),
+		)
+		right = lipgloss.JoinVertical(lipgloss.Left,
+			model.paneTitle("MIME Types", model.detailWidth()),
+			model.mimeTypeBrowserDetail(),
+		)
+	} else {
+		left = lipgloss.JoinVertical(lipgloss.Left,
+			model.paneTitle("MIME Types", model.listWidth()),
+			model.mimeTypes.View(model.styles, model.paneFocused(mimeTypePane), model.styles.MimeRow),
+		)
+		right = model.detail()
+	}
+
+	body := splitColumns(model.styles, model.window.width, model.listHeight(), left, right)
 	return model.styles.Window(model.window.width, model.window.height).Render(header + "\n" + body)
 }
 
+func (model Model) paneTitle(title string, width int) string {
+	return model.styles.InfoName().
+		Width(width).
+		BorderStyle(lipgloss.ASCIIBorder()).
+		BorderForeground(model.styles.Accent()).
+		BorderBottom(true).
+		Render(title)
+}
+
 func (model Model) applicationInfo() string {
-	if model.focus != applicationPane {
+	if model.swap || model.focus != applicationPane {
 		return ""
 	}
 	app, ok := model.selectedApplication()
 	if !ok {
 		return ""
 	}
-	mimeType := model.mimeTypes.Selected()
+	return model.applicationInfoFor(app, model.mimeTypes.Selected())
+}
+
+func (model Model) applicationInfoFor(app mimetype.Application, mimeType string) string {
 	categories := orDash(app.Categories)
 	mimeTypes := orDash(strings.Join(app.MIMETypes, " "))
-	defaultLabel := yesNo(model.selectedIsDefault())
-	clearedLabel := yesNo(model.selectedIsCleared())
+	defaultLabel := yesNo(model.associations.IsDefault(mimeType, app.FileName))
+	clearedLabel := yesNo(model.associations.Removed(mimeType, app.FileName))
 	width := max(model.detailWidth(), 1)
 	frame := model.styles.InfoFrame(width)
 	inner := max(1, width-frame.GetHorizontalFrameSize())
@@ -111,7 +142,7 @@ func (model Model) applicationInfo() string {
 		model.infoLine(inner, model.infoField("File: ", app.FileName)),
 		model.infoLine(inner, model.infoField("Categories: ", categories)),
 		model.infoLine(inner, model.infoField("MIME types: ", mimeTypes)),
-		model.infoLine(inner, model.infoState("Default for "+mimeType+": "+defaultLabel, defaultLabel)),
+		model.infoLine(inner, model.infoState("Default for "+orDash(mimeType)+": "+defaultLabel, defaultLabel)),
 		model.infoLine(inner, model.infoState("Cleared: "+clearedLabel, clearedLabel)),
 		model.infoLine(inner, model.styles.InfoHint().Render(model.actionHint())),
 	}
@@ -202,8 +233,61 @@ func (model Model) applicationList() string {
 	return model.applications.View(model.styles, model.paneFocused(applicationPane), model.styles.AppRow)
 }
 
+func (model Model) applicationBrowserList() string {
+	if model.browserAppList.Empty() {
+		width := max(model.listWidth(), 1)
+		return model.styles.EmptyRow(width).Render("no applications")
+	}
+	return model.browserAppList.View(model.styles, model.paneFocused(applicationPane), model.styles.AppRow)
+}
+
+func (model Model) mimeTypeBrowserDetail() string {
+	app, ok := model.selectedBrowserApplication()
+	if !ok {
+		width := max(model.detailWidth(), 1)
+		return model.styles.EmptyRow(width).Render("no applications")
+	}
+
+	list := model.browserMIMETypes.View(model.styles, model.paneFocused(mimeTypePane), model.styles.MimeRow)
+	if model.browserMIMETypes.Empty() {
+		width := max(model.detailWidth(), 1)
+		list = model.styles.EmptyRow(width).Render("no MIME types for " + app.Name)
+	}
+
+	info := model.mimeTypeBrowserInfo()
+	listHeight := model.mimeTypeBrowserListHeight()
+	listBlock := lipgloss.NewStyle().
+		Height(listHeight).
+		MaxHeight(listHeight).
+		Render(list)
+	return lipgloss.JoinVertical(lipgloss.Top, listBlock, info)
+}
+
+func (model Model) mimeTypeBrowserInfo() string {
+	if model.focus != mimeTypePane {
+		return ""
+	}
+	app, ok := model.selectedBrowserApplication()
+	if !ok {
+		return ""
+	}
+	return model.applicationInfoFor(app, model.selectedBrowserMIMEType())
+}
+
+func (model Model) mimeTypeBrowserInfoHeight() int {
+	info := model.mimeTypeBrowserInfo()
+	if info == "" {
+		return 0
+	}
+	return lipgloss.Height(info)
+}
+
+func (model Model) mimeTypeBrowserListHeight() int {
+	titleHeight := lipgloss.Height(model.paneTitle("MIME Types", model.detailWidth()))
+	return max(0, model.listHeight()-titleHeight-model.mimeTypeBrowserInfoHeight())
+}
+
 func (model Model) listHeight() int {
-	// The extra line is the newline between the header and the split.
 	used := lipgloss.Height(model.header()) + lipgloss.Height(model.footer()) + 1
 	return max(0, model.window.height-used)
 }
